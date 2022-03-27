@@ -2,6 +2,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -45,6 +46,7 @@ class clientThread extends Thread {
 	Socket socket;
 
 	clientThread(Socket socket) {
+		System.out.println("Connected to Client");
 		this.socket = socket;
 	}
 
@@ -61,45 +63,57 @@ class clientThread extends Thread {
 		} catch (IOException e) {
 			return;
 		}
+
+		InputStream inputStream;
+		ObjectInputStream objectInputStream = null;
+		try {
+			inputStream = socket.getInputStream();
+			objectInputStream = new ObjectInputStream(inputStream);
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		// create a DataInputStream so we can read data from it.
+
 		String line;
-		while (true) {
-			try {
-				line = brinp.readLine();
-				while (!line.equalsIgnoreCase("QUIT")) {
-
-					out.println(line);
-					out.flush();
-					System.out.println("Response to Client  :  " + line);
-					line = brinp.readLine();
+		try {
+			Boolean bool = true;
+			while (true) {
+				Message message = (Message) objectInputStream.readObject();
+				if (message.type.equals("QUIT")) {
+					System.out.println("Inside");
+					break;
 				}
-			} catch (IOException e) {
-				line = this.getName(); // reused String line for getting thread name
-				System.out.println("IO Error/ Client " + line + " terminated abruptly");
-			} catch (NullPointerException e) {
-				line = this.getName(); // reused String line for getting thread name
-				System.out.println("Client " + line + " Closed");
+				System.out.println("Write request from Client  :  " + message.content);
 			}
+		} catch (IOException e) {
+			line = this.getName(); // reused String line for getting thread name
+			System.out.println("IO Error/ Client " + line + " terminated abruptly");
+		} catch (NullPointerException e) {
+			line = this.getName(); // reused String line for getting thread name
+			System.out.println("Client " + line + " Closed");
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
-			finally {
-				try {
-					System.out.println("Connection Closing..");
-					if (brinp != null) {
-						brinp.close();
-						System.out.println(" Socket Input Stream Closed");
-					}
-
-					if (out != null) {
-						out.close();
-						System.out.println("Socket Out Closed");
-					}
-					if (socket != null) {
-						socket.close();
-						System.out.println("Socket Closed");
-					}
-
-				} catch (IOException ie) {
-					System.out.println("Socket Close Error");
+		finally {
+			try {
+				System.out.println("Client connection Closing..");
+				if (brinp != null) {
+					brinp.close();
 				}
+
+				if (out != null) {
+					out.close();
+				}
+				if (socket != null) {
+					socket.close();
+					System.out.println("Client socket Closed");
+				}
+
+			} catch (IOException ie) {
+				System.out.println("Socket Close Error");
 			}
 		}
 	}
