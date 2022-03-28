@@ -1,8 +1,12 @@
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -11,22 +15,19 @@ public class server {
 
 	public static void main(String[] args) throws Exception {
 		// Initialize ServerSocket
-		int port = 22222;
-		ServerSocket ssock = null;
+		int clientPort = 22222;
+		ServerSocket clientSocket = null;
 		try {
-			ssock = new ServerSocket(port);
+			clientSocket = new ServerSocket(clientPort);
 		} catch (Exception e) {
-			System.out.println("Could not start server on " + port);
+			System.out.println("Could not start server on " + clientPort);
 			e.printStackTrace();
 			return;
 		}
-
-		// Accept connection to server socket
 		Socket socket = null;
-
 		while (true) {
 			try {
-				socket = ssock.accept();
+				socket = clientSocket.accept();
 				clientThread thread = new clientThread(socket);
 				thread.start();
 
@@ -38,7 +39,38 @@ public class server {
 
 			}
 		}
+
+		// Accept connection to server socket
+
 	}
+}
+
+class writeThread extends Thread {
+
+	String filename;
+	String content;
+	boolean writeCheck = false;
+
+	public writeThread(String filename, String content) {
+		// TODO Auto-generated constructor stub
+		this.filename = filename;
+		this.content = content;
+	}
+
+	@Override
+	public void run() {
+		try (PrintWriter out = new PrintWriter("fs1/" + filename)) {
+			out.println(content);
+			writeCheck = true;
+			System.out.println("Contents written to file");
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			System.out.println("Cannot open file for writing content");
+			writeCheck = false;
+			e.printStackTrace();
+		}
+	}
+
 }
 
 class clientThread extends Thread {
@@ -66,25 +98,58 @@ class clientThread extends Thread {
 
 		InputStream inputStream;
 		ObjectInputStream objectInputStream = null;
+		OutputStream outputStream = null;
+		ObjectOutputStream objectOutputStream = null;
+		Message ackMsg;
+		// create a DataInputStream so we can read data from it.
 		try {
 			inputStream = socket.getInputStream();
 			objectInputStream = new ObjectInputStream(inputStream);
-		} catch (IOException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
+			outputStream = socket.getOutputStream();
+			objectOutputStream = new ObjectOutputStream(outputStream);
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
-		// create a DataInputStream so we can read data from it.
-
 		String line;
 		try {
 			Boolean bool = true;
 			while (true) {
 				Message message = (Message) objectInputStream.readObject();
+				String content = "";
 				if (message.type.equals("QUIT")) {
-					System.out.println("Inside");
 					break;
+				} else if (message.type.equals("ENQUIRE")) {
+					System.out.println("ENQUIRE request from Client");
+					String[] pathnames;
+					File f = new File("fs1");
+
+					// Populates the array with names of files and directories
+					pathnames = f.list();
+
+					// For each pathname in the pathnames array
+					for (String pathname : pathnames) {
+						// Print the names of files and directories
+						content += pathname + "\n";
+					}
+
+					ackMsg = new Message("ENQUIREACK", content);
+					objectOutputStream.writeObject(ackMsg);
+				} else if (message.type.equals("WRITE")) {
+					System.out.println("WRITE request from Client");
+					writeThread t1 = new writeThread("file1.txt", message.content);
+					Thread thread = new Thread(t1);
+					thread.start();
+					thread.join();
+					if (t1.writeCheck) {
+						ackMsg = new Message("WRITEACK", "Write request fulfilled");
+						objectOutputStream.writeObject(ackMsg);
+						outputStream.flush();
+					} else {
+						ackMsg = new Message("WRITEACK", "Write request could not be fulfilled");
+						objectOutputStream.writeObject(ackMsg);
+					}
 				}
-				System.out.println("Write request from Client  :  " + message.content);
+
 			}
 		} catch (IOException e) {
 			line = this.getName(); // reused String line for getting thread name
@@ -93,6 +158,9 @@ class clientThread extends Thread {
 			line = this.getName(); // reused String line for getting thread name
 			System.out.println("Client " + line + " Closed");
 		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
