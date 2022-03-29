@@ -22,7 +22,17 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class server {
 
-	volatile static Queue<Message> messageQueue = new ConcurrentLinkedQueue<Message>();
+	class The_Comparator implements Comparator<Message> {
+		public int compare(Message str1, Message str2) {
+			Timestamp first_Str;
+			Timestamp second_Str;
+			first_Str = str1.timestamp;
+			second_Str = str2.timestamp;
+			return first_Str.compareTo(second_Str);
+		}
+	}
+
+	volatile static Queue<Message> messageQueue = new PriorityQueue<Message>();
 
 	public static void main(String[] args) throws Exception {
 		// Initialize ServerSocket
@@ -68,7 +78,7 @@ public class server {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		RicartAgrawal ricartAgrawal = new RicartAgrawal(filesystem, objectOutputStream, objectInputStream);
+		RicartAgrawal ricartAgrawal = new RicartAgrawal(filesystem, objectOutputStream);
 		Thread t = new Thread(ricartAgrawal);
 		t.start();
 		CheckMsgThread checkMsgThread = new CheckMsgThread(objectInputStream, ricartAgrawal);
@@ -133,11 +143,9 @@ class RicartAgrawal extends Thread {
 	ObjectInputStream objectInputStream = null;
 	ObjectOutputStream objectOutputStream = null;
 
-	public RicartAgrawal(String filesystem, ObjectOutputStream objectOutputStream,
-			ObjectInputStream objectInputStream) {
+	public RicartAgrawal(String filesystem, ObjectOutputStream objectOutputStream) {
 		// TODO Auto-generated constructor stub
 		this.filesystem = filesystem;
-		this.objectInputStream = objectInputStream;
 		this.objectOutputStream = objectOutputStream;
 	}
 
