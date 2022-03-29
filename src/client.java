@@ -21,9 +21,11 @@ public class client {
 		BufferedReader is = null;
 		PrintWriter os = null;
 		Scanner sc = null;
+		int port = Integer.parseInt(args[0]);
+		;
 
 		try {
-			s1 = new Socket("localhost", 22222); // You can use static final constant PORT_NUM
+			s1 = new Socket("localhost", port); // You can use static final constant PORT_NUM
 			System.out.println("Connected to Server.");
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -61,7 +63,8 @@ public class client {
 			switch (choice) {
 			case 1:
 				System.out.println("Enter message");
-				message = new Message("ENQUIRE", "Message to get list of files");
+				message = new Message("ENQUIRE", "Read contents of directory", "",
+						new Timestamp(System.currentTimeMillis()));
 				objectOutputStream.writeObject(message);
 				System.out.println("Sending " + message.type + " request to Server");
 				ackMsg = (Message) objectInputStream.readObject();
@@ -69,19 +72,15 @@ public class client {
 				break;
 			case 2:
 				SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-				System.out.println("hello");
 				InetAddress localhost = InetAddress.getLocalHost();
-				System.out.println("hello");
 				String clientId = localhost.getHostAddress().trim();
-				System.out.println("hello");
-				message = new Message("WRITE", clientId + "," + sdf.format(new Timestamp(System.currentTimeMillis())));
+				message = new Message("WRITE", clientId + "," + sdf.format(new Timestamp(System.currentTimeMillis())),
+						"file1.txt", new Timestamp(System.currentTimeMillis()));
 				objectOutputStream.writeObject(message);
 				System.out.println("Sending " + message.type + " request to Server");
-				ackMsg = (Message) objectInputStream.readObject();
-				System.out.println(ackMsg.content);
 				break;
 			case 3:
-				message = new Message("QUIT", "quit");
+				message = new Message("QUIT", "quit", "", new Timestamp(System.currentTimeMillis()));
 				objectOutputStream.writeObject(message);
 				is.close();
 				os.close();
