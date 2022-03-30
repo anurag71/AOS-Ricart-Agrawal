@@ -10,6 +10,9 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Random;
 import java.util.Scanner;
 
 public class client {
@@ -21,12 +24,15 @@ public class client {
 		BufferedReader is = null;
 		PrintWriter os = null;
 		Scanner sc = null;
-		int port = Integer.parseInt(args[0]);
-		;
-
+		int port = 22223;
+		ArrayList<String> givenList = new ArrayList<>();
+		givenList.addAll(Arrays.asList("10.176.69.32", "10.176.69.33", "10.176.69.34"));
+		Random rand = new Random();
+		String serverip = givenList.get(rand.nextInt(givenList.size()));
+		System.out.println(serverip);
 		try {
-			s1 = new Socket("localhost", port); // You can use static final constant PORT_NUM
-			System.out.println("Connected to Server.");
+			s1 = new Socket(serverip, port); // You can use static final constant PORT_NUM
+			System.out.println("Connected to Server " + serverip);
 		} catch (IOException e) {
 			e.printStackTrace();
 			System.err.print("Cannot connect to Server.");
