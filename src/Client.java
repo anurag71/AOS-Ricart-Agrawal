@@ -15,7 +15,7 @@ import java.util.Arrays;
 import java.util.Random;
 import java.util.Scanner;
 
-public class client {
+public class Client {
 
 	public static void main(String[] args) throws Exception {
 		Socket s1 = null;
@@ -30,69 +30,68 @@ public class client {
 		Random rand = new Random();
 		String serverip = givenList.get(rand.nextInt(givenList.size()));
 		System.out.println(serverip);
-		try {
-			s1 = new Socket(serverip, port); // You can use static final constant PORT_NUM
-			System.out.println("Connected to Server " + serverip);
-		} catch (IOException e) {
-			e.printStackTrace();
-			System.err.print("Cannot connect to Server.");
-		}
-		try {
-			br = new BufferedReader(new InputStreamReader(System.in));
-			sc = new Scanner(System.in);
-			is = new BufferedReader(new InputStreamReader(s1.getInputStream()));
-			os = new PrintWriter(s1.getOutputStream());
-		} catch (IOException e) {
-			e.printStackTrace();
-			System.err.print("IO Exception");
-		}
 
-		OutputStream outputStream = s1.getOutputStream();
-		// create an object output stream from the output stream so we can send an
-		// object through it
-		ObjectOutputStream objectOutputStream = new ObjectOutputStream(outputStream);
-		InputStream inputStream;
-		Message message;
-		Message ackMsg;
-		ObjectInputStream objectInputStream = null;
-		try {
-			inputStream = s1.getInputStream();
-			objectInputStream = new ObjectInputStream(inputStream);
-		} catch (IOException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
 		int choice = 0;
 		while (choice != 3) {
+			try {
+				s1 = new Socket(serverip, port); // You can use static final constant PORT_NUM
+			} catch (IOException e) {
+				e.printStackTrace();
+				System.err.print("Cannot connect to Server.");
+			}
+			OutputStream outputStream = s1.getOutputStream();
+			// create an object output stream from the output stream so we can send an
+			// object through it
+			ObjectOutputStream objectOutputStream = new ObjectOutputStream(outputStream);
+			InputStream inputStream;
+			Message message;
+			Message ackMsg;
+			ObjectInputStream objectInputStream = null;
+			try {
+				inputStream = s1.getInputStream();
+				objectInputStream = new ObjectInputStream(inputStream);
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
 			System.out.println("Menu:\n1. Display files\n2. Write to file\n3. Quit\nEnter Your choice: ");
 			choice = sc.nextInt();
 			switch (choice) {
 			case 1:
 				System.out.println("Enter message");
-				message = new Message("ENQUIRE", "Read contents of directory", "",
-						new Timestamp(System.currentTimeMillis()));
+				message = new Message("ENQUIRE", "Read contents of directory", "", 0);
 				objectOutputStream.writeObject(message);
 				System.out.println("Sending " + message.type + " request to Server");
 				ackMsg = (Message) objectInputStream.readObject();
-				System.out.println(ackMsg.content);
-				break;
-			case 2:
-				SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-				InetAddress localhost = InetAddress.getLocalHost();
-				String clientId = localhost.getHostAddress().trim();
-				message = new Message("WRITE", clientId + "," + sdf.format(new Timestamp(System.currentTimeMillis())),
-						"file1.txt", new Timestamp(System.currentTimeMillis()));
-				objectOutputStream.writeObject(message);
-				System.out.println("Sending " + message.type + " request to Server");
-				break;
-			case 3:
-				message = new Message("QUIT", "quit", "", new Timestamp(System.currentTimeMillis()));
-				objectOutputStream.writeObject(message);
+				System.out.println("List of files: " + ackMsg.content);
 				is.close();
 				os.close();
 				br.close();
 				s1.close();
 				sc.close();
+				break;
+			case 2:
+				SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+				InetAddress localhost = InetAddress.getLocalHost();
+				String clientId = localhost.getHostAddress().trim();
+				message = new Message("ENQUIRE", "Read contents of directory", "", 0);
+				objectOutputStream.writeObject(message);
+				ackMsg = (Message) objectInputStream.readObject();
+				System.out.println("List of files: " + ackMsg.content + "\nEnter the name of file:");
+				String filename = sc.nextLine();
+				message = new Message("WRITE", clientId + "," + sdf.format(new Timestamp(System.currentTimeMillis())),
+						filename, 0);
+				objectOutputStream.writeObject(message);
+				System.out.println("Sending " + message.type + " request to Server");
+				ackMsg = (Message) objectInputStream.readObject();
+				System.out.println(ackMsg.content);
+				is.close();
+				os.close();
+				br.close();
+				s1.close();
+				sc.close();
+				break;
+			case 3:
 				System.out.println("Connection Closed");
 				break;
 			}
