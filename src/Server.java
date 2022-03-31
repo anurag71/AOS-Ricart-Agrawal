@@ -1,4 +1,5 @@
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -12,12 +13,8 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.PriorityBlockingQueue;
 
 class serverStore {
 	ObjectInputStream objectInputStream = null;
@@ -38,15 +35,54 @@ public class Server {
 	ConcurrentHashMap<String, ArrayList<String>> deffered = new ConcurrentHashMap<String, ArrayList<String>>();
 	ConcurrentHashMap<String, boolean[]> replies = new ConcurrentHashMap<String, boolean[]>();
 	ConcurrentHashMap<String, boolean[]> replicateAck = new ConcurrentHashMap<String, boolean[]>();
+	ConcurrentHashMap<String, Integer> time = new ConcurrentHashMap<String, Integer>();
 	ConcurrentHashMap<String, Integer> hostMap = new ConcurrentHashMap<String, Integer>();
 
-	volatile int time = 0;
 	int d = 1;
 	Socket socket;
 	ArrayList<String> hosts = new ArrayList<String>();
 	volatile boolean isExecutingCritical = false;
 	volatile boolean isRequested = false;
 	volatile boolean checkreply[] = new boolean[2];
+
+	public Server() {
+
+		boolean[] temp = new boolean[2];
+		temp[0] = false;
+		temp[1] = false;
+		insideCritical.put("file1.txt", false);
+		insideCritical.put("file2.txt", false);
+		insideCritical.put("file3.txt", false);
+
+		hasRequested.put("file1.txt", false);
+		hasRequested.put("file2.txt", false);
+		hasRequested.put("file3.txt", false);
+
+		hasRequestedTimestamp.put("file1.txt", 0);
+		hasRequestedTimestamp.put("file2.txt", 0);
+		hasRequestedTimestamp.put("file3.txt", 0);
+
+		deffered.put("file1.txt", new ArrayList<String>());
+		deffered.put("file2.txt", new ArrayList<String>());
+		deffered.put("file3.txt", new ArrayList<String>());
+
+		replies.put("file1.txt", temp);
+		replies.put("file2.txt", temp);
+		replies.put("file3.txt", temp);
+
+		replicateAck.put("file1.txt", temp);
+		replicateAck.put("file2.txt", temp);
+		replicateAck.put("file3.txt", temp);
+
+		time.put("file1.txt", 0);
+		time.put("file2.txt", 0);
+		time.put("file3.txt", 0);
+
+		System.out.println(replicateAck.get("file1.txt")[0] + " " + replicateAck.get("file1.txt")[1]);
+		System.out.println(replicateAck.get("file2.txt")[0] + " " + replicateAck.get("file2.txt")[1]);
+		System.out.println(replicateAck.get("file3.txt")[0] + " " + replicateAck.get("file3.txt")[1]);
+
+	}
 
 	ConcurrentHashMap<String, serverStore> serverlist = new ConcurrentHashMap<>();
 	String filesystem;
@@ -111,16 +147,11 @@ public class Server {
 	}
 
 	public void Initialize() {
+		hosts.clear();
 		int i = 0;
 		for (String host : serverlist.keySet()) {
-
+			System.out.println("Host check " + host);
 			hosts.add(host);
-			replicateAck.get("test1")[i] = false;
-			replicateAck.get("test2")[i] = false;
-			replicateAck.get("test3")[i] = false;
-			replies.get("test1")[i] = false;
-			replies.get("test2")[i] = false;
-			replies.get("test3")[i] = false;
 			hostMap.put(host, i);
 			i++;
 		}
@@ -152,16 +183,22 @@ class CheckMsgThread extends Thread {
 				int messagetime = m.timestamp;
 				String source = m.source;
 				String type = m.type;
+				server.time.put(filename, Math.max(server.time.get(filename) + server.d, messagetime));
 				if (type.equals("REQUEST")) {
+					System.out.println("REQUEST received from " + source);
 					server.replies.get(filename)[server.hostMap.get(source)] = false;
-					server.time = Math.max(server.time + server.d, messagetime);
+
 					if (server.insideCritical.get(filename)) {
 						server.deffered.get(m.fileName).add(m.source);
+						System.out.println("Deferring REQUEST");
 					} else {
-						server.time = Math.max(server.time + server.d, messagetime);
+						System.out.println("Not executing critical");
+						System.out.println(filename + " " + server.hasRequested.get(filename));
 						if (server.hasRequested.get(filename)) {
+
 							if (server.hasRequestedTimestamp.get(filename) < messagetime) {
 								server.deffered.get(filename).add(m.source);
+								System.out.println("Deferring REQUEST");
 							} else {
 								String hs = null;
 								try {
@@ -169,30 +206,59 @@ class CheckMsgThread extends Thread {
 								} catch (UnknownHostException e1) {
 									e1.printStackTrace();
 								}
-								server.time = server.time + server.d;
-								Message reply = new Message("REPLY", hs, m.content, filename, server.time);
+								int temp = server.time.get(filename) + server.d;
+								server.time.put(filename, temp);
+								Message reply = new Message("REPLY", hs, m.content, filename,
+										server.time.get(filename));
 								objecOutputStream.writeObject(reply);
+								System.out.println("REPLY sent to " + source);
 							}
+						} else {
+							String hs = null;
+							try {
+								hs = InetAddress.getLocalHost().getHostAddress();
+							} catch (UnknownHostException e1) {
+								e1.printStackTrace();
+							}
+							int temp = server.time.get(filename) + server.d;
+							server.time.put(filename, temp);
+							Message reply = new Message("REPLY", hs, m.content, filename, server.time.get(filename));
+							objecOutputStream.writeObject(reply);
+							System.out.println("REPLY sent to " + source);
 						}
 					}
 
 				} else if (m.type.equals("REPLY")) {
-					server.time = Math.max(server.time + server.d, messagetime);
 					System.out.println("Received REPLY from " + source);
-					server.replies.get(filename)[server.hostMap.get(source)] = true;
+					boolean[] a = server.replies.get(filename);
+					a[server.hostMap.get(source)] = true;
+					server.replies.put(filename, a);
 				} else if (m.type.equals("REPLICATE")) {
-					server.time = Math.max(server.time + server.d, messagetime);
 					System.out.println("Received REPLICATE from " + m.source);
-					writeThread wt = new writeThread(server.filesystem, filename, m.content);
-					Thread t = new Thread(wt);
+					writeThread w = new writeThread(server.filesystem, filename, m.content);
+					Thread t = new Thread(w);
 					t.start();
 					try {
 						t.join();
 						System.out.println("File replicated");
+						String hs = null;
+						try {
+							hs = InetAddress.getLocalHost().getHostAddress();
+						} catch (UnknownHostException e1) {
+							e1.printStackTrace();
+						}
+						int temp = server.time.get(filename) + server.d;
+						server.time.put(filename, temp);
+						Message reply = new Message("REPLICATEACK", hs, m.content, filename, server.time.get(filename));
+						objecOutputStream.writeObject(reply);
+						System.out.println("REPLICATEACK sent to " + source);
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
+				} else if (m.type.equals("REPLICATEACK")) {
+					server.replicateAck.get(filename)[server.hostMap.get(source)] = true;
+					System.out.println("Received REPLICATEACK from " + source);
 				}
 			} catch (ClassNotFoundException | IOException e) {
 				// TODO Auto-generated catch block
@@ -200,6 +266,7 @@ class CheckMsgThread extends Thread {
 			}
 		}
 		System.out.println("Connection to server lost");
+		System.exit(0);
 	}
 }
 
@@ -221,10 +288,12 @@ class RicartAgrawal extends Thread {
 		System.out.println("Started RA");
 		// create a DataInputStream so we can read data from it.
 		while (true) {
-			if (!server.insideCritical.get(filename) && server.deffered.get(filename).isEmpty()) {
+			if (!server.insideCritical.get(filename)) {
 				if (server.replies.get(filename)[0] && server.replies.get(filename)[1]) {
 					System.out.println("Executing write operation");
-					server.insideCritical.put(filename, true);
+					Boolean value = server.insideCritical.get(filename);
+					if (value != null)
+						server.insideCritical.computeIfPresent(filename, (key, oldValue) -> true);
 					writeThread t1 = new writeThread(server.filesystem, filename, content);
 					Thread t = new Thread(t1);
 					try {
@@ -252,48 +321,29 @@ class RicartAgrawal extends Thread {
 						// TODO Auto-generated catch block
 						e2.printStackTrace();
 					}
-					server.time = server.time + server.d;
-					final Message request = new Message("REQUEST", hs, content, filename, server.time);
-					Thread t1 = null;
+					int temp = server.time.get(filename) + server.d;
+					server.time.put(filename, temp);
+					Message request = new Message("REQUEST", hs, content, filename, temp);
 					server.hasRequested.put(filename, true);
-					server.hasRequestedTimestamp.put(filename, server.time);
+					for (String s : server.hasRequested.keySet()) {
+						System.out.println(s + " " + server.hasRequested.get(s));
+					}
 					if (!server.replies.get(filename)[0]) {
-						t1 = new Thread(new Runnable() {
-
-							@Override
-
-							public void run() {
-								try {
-
-									server.serverlist.get(server.hosts.get(0)).objectOutputStream.writeObject(request);
-								} catch (IOException e) {
-									// TODO Auto-generated catch block
-									e.printStackTrace();
-								}
-							}
-
-						});
-						t1.start();
+						try {
+							server.serverlist.get(server.hosts.get(0)).objectOutputStream.writeObject(request);
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
 						System.out.println("Sent request to " + server.hosts.get(0));
 					}
-					Thread t2 = null;
 					if (!server.replies.get(filename)[1]) {
-						t2 = new Thread(new Runnable() {
-
-							@Override
-
-							public void run() {
-								try {
-
-									server.serverlist.get(server.hosts.get(1)).objectOutputStream.writeObject(request);
-								} catch (IOException e) {
-									// TODO Auto-generated catch block
-									e.printStackTrace();
-								}
-							}
-
-						});
-						t2.start();
+						try {
+							server.serverlist.get(server.hosts.get(1)).objectOutputStream.writeObject(request);
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
 						System.out.println("Sent request to " + server.hosts.get(1));
 					}
 
@@ -304,19 +354,36 @@ class RicartAgrawal extends Thread {
 							System.out.println("Executing write operation");
 							server.insideCritical.put(filename, true);
 							writeThread wt = new writeThread(server.filesystem, filename, content);
-							Thread t = new Thread(t1);
+							Thread t = new Thread(wt);
 							try {
 								t.start();
 								t.join();
+								server.replicateAck.get(filename)[0] = false;
+								server.replicateAck.get(filename)[1] = false;
 								ReplicateThread replicateThread = new ReplicateThread(server, 0, filename, content);
 								Thread repl1 = new Thread(replicateThread);
+								int temp1 = server.time.get(filename) + server.d;
+								server.time.put(filename, temp1);
 								replicateThread = new ReplicateThread(server, 1, filename, content);
 								Thread repl2 = new Thread(replicateThread);
 								repl1.start();
 								repl2.start();
 								repl1.join();
 								repl2.join();
+								int temp2 = server.time.get(filename) + server.d;
+								server.time.put(filename, temp2);
 								server.insideCritical.put(filename, false);
+								server.hasRequested.put(filename, false);
+								for (String host : server.deffered.get(filename)) {
+									Message reply = new Message("REPLY", hs, "", filename, temp2);
+									try {
+										server.serverlist.get(host).objectOutputStream.writeObject(reply);
+									} catch (IOException e) {
+										// TODO Auto-generated catch block
+										e.printStackTrace();
+									}
+									System.out.println("Deferred REPLY sent to " + host);
+								}
 								break;
 							} catch (InterruptedException e) {
 								e.printStackTrace();
@@ -324,6 +391,9 @@ class RicartAgrawal extends Thread {
 						}
 					}
 				}
+				break;
+			} else {
+				System.out.println("Waiting to get access to critical section");
 			}
 		}
 	}
@@ -353,21 +423,24 @@ class ReplicateThread extends Thread {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
-		server.time = server.time + server.d;
-		Message replicate = new Message("REPLICATE", hs, content, filename, server.time);
-
+		Message replicate = new Message("REPLICATE", hs, content, filename, server.time.get(filename));
+		System.out.println(server.replicateAck.get(filename)[hostindex]);
 		try {
 			server.serverlist.get(server.hosts.get(hostindex)).objectOutputStream.writeObject(replicate);
+			System.out.println("REPLICATE sent to " + server.hosts.get(hostindex));
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		System.out.println(server.replicateAck.get(filename)[hostindex]);
+
 		while (true) {
 			if (server.replicateAck.get(filename)[hostindex]) {
 				break;
 			}
 		}
-		server.replicateAck.get(filename)[hostindex] = true;
+		server.replicateAck.get(filename)[hostindex] = false;
+		System.out.println(server.replicateAck.get(filename)[hostindex]);
 	}
 }
 
@@ -387,17 +460,23 @@ class writeThread extends Thread {
 
 	@Override
 	public void run() {
+		System.out.println("Writting contents to file");
 		try {
-			System.out.println("inside write thread");
-			FileWriter myWriter = new FileWriter(filesystem + "/" + filename, true);
-			myWriter.write(content + "\n");
-			myWriter.close();
-			writeCheck = true;
-		} catch (IOException e) {
-			System.out.println("An error occurred.");
+			Thread.sleep(10000);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		try (FileWriter fw = new FileWriter(filesystem + "/" + filename, true);
+				BufferedWriter bw = new BufferedWriter(fw);
+				PrintWriter out = new PrintWriter(bw)) {
+			out.println(content);
+			// more code
+		} catch (IOException e) {
+			// exception handling left as an exercise for the reader
+		}
 		System.out.println("Contents written to file");
+
 	}
 
 }
@@ -443,7 +522,7 @@ class clientThread extends Thread {
 		}
 		String line;
 		try {
-			Boolean bool = true;
+			System.out.println("Waiting for client message");
 			Message message = (Message) objectInputStream.readObject();
 			if (message.type.equals("ENQUIRE")) {
 				System.out.println("ENQUIRE request from Client");
@@ -458,27 +537,27 @@ class clientThread extends Thread {
 					content += i + ". " + pathname + "\n";
 					i++;
 				}
-				ackMsg = new Message("ENQUIREACK", content, "", server.time);
+				ackMsg = new Message("ENQUIREACK", content, "", 0);
 				objectOutputStream.writeObject(ackMsg);
 			} else if (message.type.equals("WRITE")) {
 
 				String content = message.content;
 				String filename = message.fileName;
 				System.out.println("WRITE request from Client");
-				server.time = server.time + server.d;
 				RicartAgrawal ricartAgrawal = new RicartAgrawal(server, filename, content);
 				Thread thread = new Thread(ricartAgrawal);
 				thread.start();
 				try {
 					thread.join();
+					System.out.println("WRITE served");
+					ackMsg = new Message("WACK", "WRITE Successful", "", 0);
+					objectOutputStream.writeObject(ackMsg);
+					outputStream.flush();
 				} catch (InterruptedException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-				server.time = server.time + server.d;
-				ackMsg = new Message("WACK", "WRITE Successful", "", server.time);
-				objectOutputStream.writeObject(ackMsg);
-				outputStream.flush();
+
 			}
 
 		} catch (IOException e) {
